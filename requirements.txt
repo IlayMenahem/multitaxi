@@ -1,0 +1,12 @@
+stable-baselines3
+gymnasium
+git+https://github.com/CLAIR-LAB-TECHNION/multi-taxi@0.4.0
+
+jax
+flax>=0.10.1
+rlax
+optax
+
+ipykernel
+matplotlib
+tqdm
