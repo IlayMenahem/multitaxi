@@ -1,6 +1,7 @@
 import gymnasium as gym
 import jax.numpy as jnp
 import numpy as np
+import time
 
 encoding = {' ': 0, ':': -1, '|': 1, 'G': -2, 'F': 2, 'P': 3, 'T': 5}
 def encode(value):
@@ -10,7 +11,14 @@ def encode(value):
     return sum([encoding[char] for char in value])
 
 def get_passenger_locations(env):
-    return [passenger.location for passenger in env.unwrapped.state().passengers]
+    passengers = env.unwrapped.state().passengers
+    passengers_locations = []
+
+    for passenger in passengers:
+        if not passenger.in_taxi:
+            passengers_locations.append(passenger.location)
+
+    return passengers_locations
 
 def get_taxi_location(env):
     return env.unwrapped.state().taxis[0].location
@@ -72,3 +80,21 @@ class MapWrapper(gym.Wrapper):
         }
 
         return observation, reward, done, truncated, info
+
+
+def eval_agent(env, agent):
+    obs, _ = env.reset()
+    done = False
+    truncated = False
+
+    total_reward = 0
+
+    while not done and not truncated:
+        action = agent(obs)
+        obs, reward, done, truncated, _ = env.step(action)
+        total_reward += reward
+
+        env.render()
+        time.sleep(0.1)
+
+    return total_reward

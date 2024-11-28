@@ -73,6 +73,7 @@ class BfsAgent:
         passenger_locs = get_passenger_locations(self.env)
 
         path = bfs_pathfinding(self.env, taxi_loc, passenger_locs)
+        # agent is at the passenger location, so return pickup action
         if len(path) == 1:
             return self.action_map['pickup']
 
