@@ -1,9 +1,10 @@
-from utils import eval_agent
+from utils import eval_agent, MapWrapper
 from multi_taxi import single_taxi_v0, maps
 
 from agents import BfsAgent, BCAgent
 
 def do_episode(env, agent, expert, max_steps=150):
+    total_reward = 0
     obs, _ = env.reset()
 
     for _ in range(max_steps):
@@ -13,8 +14,11 @@ def do_episode(env, agent, expert, max_steps=150):
         agent.learner_step(obs, expert_action)
         obs, reward, done, truncated, _ = env.step(action)
 
+        total_reward += reward
         if done or truncated:
             break
+
+    print('reward ', total_reward)
 
 def main(num_episodes=1000000):
     env = single_taxi_v0.gym_env(
@@ -26,6 +30,7 @@ def main(num_episodes=1000000):
         domain_map=maps.DEFAULT_MAP,
         render_mode='human'
     )
+    env = MapWrapper(env)
 
     agent = BCAgent(env, learning_rate=0.001)
     expert = BfsAgent(env)

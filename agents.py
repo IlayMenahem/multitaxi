@@ -144,19 +144,22 @@ class BCAgent(MultiTaxiAgent):
         symbolic_obs, domain_map = preprocess(obs)
         qVals = self.model(symbolic_obs, domain_map)
 
-        return int(jax.lax.argmax(qVals, axis=-1)[0])
+        a = jnp.argmax(qVals, axis=-1)
+        a = int(a[0])
+
+        return a
 
     def learner_step(self, obs, expert_action):
         self.model.train()
 
         symbolic_obs, domain_map = preprocess(obs)
-        probs = self.model(symbolic_obs, domain_map)
-        def loss_fn(probs, expert_action):
+        def loss_fn(model, symbolic_obs, domain_map, expert_action):
+            probs = model(symbolic_obs, domain_map)
             one_hot = jax.nn.one_hot(expert_action, probs.shape[-1])
             return jnp.sum((one_hot - probs)**2)
 
         grad_fn = nnx.value_and_grad(nnx.jit(loss_fn))
-        loss, grad = grad_fn(probs, expert_action)
+        loss, grad = grad_fn(self.model, symbolic_obs, domain_map, expert_action)
         self._optimizer.update(grad)
 
         return loss
