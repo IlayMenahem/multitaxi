@@ -1,7 +1,6 @@
 import gymnasium as gym
 import jax.numpy as jnp
 import numpy as np
-import time
 
 encoding = {' ': 0, ':': -1, '|': 1, 'G': -2, 'F': 2, 'P': 3, 'T': 5}
 def encode(value):
@@ -81,7 +80,6 @@ class MapWrapper(gym.Wrapper):
 
         return observation, reward, done, truncated, info
 
-
 def eval_agent(env, agent):
     obs, _ = env.reset()
     done = False
@@ -89,12 +87,9 @@ def eval_agent(env, agent):
 
     total_reward = 0
 
-    while not done and not truncated:
+    while not (done or truncated):
         action = agent(obs)
         obs, reward, done, truncated, _ = env.step(action)
         total_reward += reward
-
-        env.render()
-        time.sleep(0.1)
 
     return total_reward
