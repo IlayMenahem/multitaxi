@@ -1,24 +1,24 @@
-from utils import eval_agent, MapWrapper
 from multi_taxi import single_taxi_v0, maps
 
 from agents import BfsAgent, BCAgent
+from utils import eval_agent, MapWrapper, ReplayBuffer
 
-def do_episode(env, agent, expert, max_steps=150):
+def do_episode(env, agent, expert, replay_buffer, max_steps=150, target_period=32):
     total_reward = 0
     obs, _ = env.reset()
 
-    for _ in range(max_steps):
-        action = agent(obs)
+    for step in range(max_steps):
         expert_action = expert(obs)
+        replay_buffer.push((obs, expert_action))
+        obs, reward, done, truncated, _ = env.step(expert_action)
 
-        agent.learner_step(obs, expert_action)
-        obs, reward, done, truncated, _ = env.step(action)
+        if step % target_period == 0 and replay_buffer.is_ready():
+            batch_obs, expert_actions = replay_buffer.sample()
+            agent.learner_step(batch_obs, expert_actions)
 
         total_reward += reward
         if done or truncated:
             break
-
-    print('reward ', total_reward)
 
 def main(num_episodes=1000000):
     env = single_taxi_v0.gym_env(
@@ -32,14 +32,16 @@ def main(num_episodes=1000000):
     )
     env = MapWrapper(env)
 
+    replay_buffer = ReplayBuffer(capacity=1000, batch_size=32)
+
     agent = BCAgent(env, learning_rate=0.001)
     expert = BfsAgent(env)
 
     for episode in range(num_episodes):
-        do_episode(env, agent, expert)
+        do_episode(env, agent, expert, replay_buffer)
 
-        if episode % 1000 == 0:
-            print('reward ', eval_agent(env, agent))
+        if episode % 100 == 0:
+            print('eval rewards ', eval_agent(env, agent))
 
 if __name__ == '__main__':
     main()

@@ -56,3 +56,11 @@ class MultiTaxi(nnx.Module):
         x = self.linear2(x)
 
         return x
+
+class probabilityMultiTaxi(nnx.Module):
+    def __init__(self, img_shape, symbolic_shape, n_actions, rng = nnx.Rngs(0)):
+        self.multi_taxi = MultiTaxi(img_shape, symbolic_shape, n_actions, rng)
+
+    def __call__(self, symbolic_obs, domain_map):
+        x = self.multi_taxi(symbolic_obs, domain_map)
+        return jax.nn.softmax(x)

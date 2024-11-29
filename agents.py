@@ -10,7 +10,7 @@ from multi_taxi import single_taxi_v0
 from utils import get_taxi_location, get_passenger_locations
 import numpy as np
 
-from models import MultiTaxi
+from models import MultiTaxi, probabilityMultiTaxi
 
 
 def recounstruct_path(prev, location):
@@ -132,8 +132,8 @@ class BCAgent(MultiTaxiAgent):
     def __init__(self, env, learning_rate):
         img_shape = env.observation_space['domain_map'].shape
         symbolic_shape = env.observation_space['symbolic'].shape[0]
-        num_actions = env.action_space.n
-        self.model = MultiTaxi(img_shape, symbolic_shape, num_actions)
+        self.num_actions = env.action_space.n
+        self.model = probabilityMultiTaxi(img_shape, symbolic_shape, self.num_actions)
 
         optimizer = optax.chain(optax.clip_by_global_norm(1.0), optax.adamw(learning_rate))
         self._optimizer = nnx.Optimizer(self.model, optimizer)
@@ -142,9 +142,9 @@ class BCAgent(MultiTaxiAgent):
         self.model.eval()
 
         symbolic_obs, domain_map = preprocess(obs)
-        qVals = self.model(symbolic_obs, domain_map)
+        probs = self.model(symbolic_obs, domain_map)
 
-        a = jnp.argmax(qVals, axis=-1)
+        a = jnp.argmax(probs, axis=-1)
         a = int(a[0])
 
         return a
@@ -152,14 +152,15 @@ class BCAgent(MultiTaxiAgent):
     def learner_step(self, obs, expert_action):
         self.model.train()
 
-        symbolic_obs, domain_map = preprocess(obs)
+        symbolic_obs, domain_map = preprocess_batch(obs)
+        expert_action_one_hot = jax.nn.one_hot(expert_action, self.num_actions)
+
         def loss_fn(model, symbolic_obs, domain_map, expert_action):
             probs = model(symbolic_obs, domain_map)
-            one_hot = jax.nn.one_hot(expert_action, probs.shape[-1])
-            return jnp.sum((one_hot - probs)**2)
+            return jnp.sum((expert_action - probs)**2)
 
         grad_fn = nnx.value_and_grad(nnx.jit(loss_fn))
-        loss, grad = grad_fn(self.model, symbolic_obs, domain_map, expert_action)
+        loss, grad = grad_fn(self.model, symbolic_obs, domain_map, expert_action_one_hot)
         self._optimizer.update(grad)
 
         return loss
