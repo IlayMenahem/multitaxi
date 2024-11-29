@@ -1,3 +1,6 @@
+import collections
+import random
+
 import gymnasium as gym
 import jax.numpy as jnp
 import numpy as np
@@ -10,7 +13,14 @@ def encode(value):
     return sum([encoding[char] for char in value])
 
 def get_passenger_locations(env):
-    return [passenger.location for passenger in env.unwrapped.state().passengers]
+    passengers = env.unwrapped.state().passengers
+    passengers_locations = []
+
+    for passenger in passengers:
+        if not passenger.in_taxi:
+            passengers_locations.append(passenger.location)
+
+    return passengers_locations
 
 def get_taxi_location(env):
     return env.unwrapped.state().taxis[0].location
@@ -72,3 +82,37 @@ class MapWrapper(gym.Wrapper):
         }
 
         return observation, reward, done, truncated, info
+
+def eval_agent_episode(env, agent):
+    obs, _ = env.reset()
+    done = False
+    truncated = False
+
+    total_reward = 0
+
+    while not (done or truncated):
+        action = agent(obs)
+        obs, reward, done, truncated, _ = env.step(action)
+        total_reward += reward
+
+    return total_reward
+
+def eval_agent(env, agent, num_episodes=10):
+    rewards = [eval_agent_episode(env, agent) for _ in range(num_episodes)]
+    return rewards
+
+class ReplayBuffer(object):
+    """A simple Python replay buffer."""
+    def __init__(self, capacity, batch_size):
+        self.batch_size = batch_size
+        self.buffer = collections.deque(maxlen=capacity)
+
+    def push(self, data):
+        self.buffer.append(data)
+
+    def sample(self):
+        batch = random.sample(self.buffer, self.batch_size)
+        return tuple(zip(*batch))
+
+    def is_ready(self):
+        return len(self.buffer) >= self.batch_size

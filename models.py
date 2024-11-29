@@ -1,10 +1,6 @@
-import torch
 from flax import nnx
 import jax
 import jax.numpy as jnp
-import gymnasium as gym
-
-from stable_baselines3.common.torch_layers import BaseFeaturesExtractor
 
 
 class SymbolicExtractor(nnx.Module):
@@ -61,38 +57,10 @@ class MultiTaxi(nnx.Module):
 
         return x
 
+class probabilityMultiTaxi(nnx.Module):
+    def __init__(self, img_shape, symbolic_shape, n_actions, rng = nnx.Rngs(0)):
+        self.multi_taxi = MultiTaxi(img_shape, symbolic_shape, n_actions, rng)
 
-class CustomCombinedExtractor(BaseFeaturesExtractor):
-    def __init__(self, observation_space: gym.spaces.Dict):
-
-        raise NotImplementedError("This example is not implemented yet.")
-
-        super().__init__(observation_space, features_dim=1)
-
-        extractors = {}
-
-        total_concat_size = 0
-        for key, subspace in observation_space.spaces.items():
-            if key == "symbolic":
-                # We will just downsample one channel of the image by 4x4 and flatten.
-                # Assume the image is single-channel (subspace.shape[0] == 0)
-                extractors[key] = nn.Sequential(nn.MaxPool2d(4), nn.Flatten())
-                total_concat_size += subspace.shape[1] // 4 * subspace.shape[2] // 4
-            elif key == "domain_map":
-                # Run through a simple MLP
-                extractors[key] = nn.Linear(subspace.shape[0], 16)
-                total_concat_size += 16
-
-        self.extractors = nn.ModuleDict(extractors)
-
-        # Update the features dim manually
-        self._features_dim = total_concat_size
-
-    def forward(self, observations):
-        encoded_tensor_list = []
-
-        # self.extractors contain nn.Modules that do all the processing.
-        for key, extractor in self.extractors.items():
-            encoded_tensor_list.append(extractor(observations[key]))
-        # Return a (B, self._features_dim) PyTorch tensor, where B is batch dimension.
-        return torch.cat(encoded_tensor_list, dim=1)
+    def __call__(self, symbolic_obs, domain_map):
+        x = self.multi_taxi(symbolic_obs, domain_map)
+        return jax.nn.softmax(x)
