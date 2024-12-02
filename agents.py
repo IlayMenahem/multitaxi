@@ -174,14 +174,10 @@ class DQN(MultiTaxiAgent):
         self.model = MultiTaxi(img_shape, symbolic_shape, num_actions)
         self._epsilon_by_frame = optax.polynomial_schedule(**epsilon_cfg)
 
-        optimizer = optax.chain(
-            optax.clip_by_global_norm(1.0),
-            optax.adamw(learning_rate)
-        )
+        optimizer = optax.chain(optax.clip_by_global_norm(1.0),optax.adamw(learning_rate))
         self._optimizer = nnx.Optimizer(self.model, optimizer)
-        self._metrics = nnx.metrics.Average('reward')
 
-    def actor_step(self, obs, episode, key, evaluation=False):
+    def __call__(self, obs, episode, key, evaluation=False):
         self.model.eval()
 
         symbolic_obs, domain_map = preprocess(obs)
@@ -196,15 +192,14 @@ class DQN(MultiTaxiAgent):
 
         return a
 
-    @nnx.jit
     def learner_step(self, obs_tm1, a_tm1, r_t, discount_t, obs_t):
         self.model.train()
 
         obs_tm1 = preprocess_batch(obs_tm1)
         obs_t = preprocess_batch(obs_t)
-        a_tm1 = jnp.array(a_tm1, dtype=jnp.int16).reshape(-1, 1)
-        r_t = jnp.array(r_t, dtype=jnp.float16).reshape(-1, 1)
-        discount_t = jnp.array(discount_t, dtype=jnp.float16).reshape(-1, 1)
+        a_tm1 = jnp.array(a_tm1, dtype=jnp.int16)
+        r_t = jnp.array(r_t, dtype=jnp.float16)
+        discount_t = jnp.array(discount_t, dtype=jnp.float16)
 
         grad_fn = nnx.value_and_grad(self._loss)
         loss, grad = grad_fn(self.model, obs_tm1, a_tm1, r_t, discount_t, obs_t)
@@ -212,16 +207,12 @@ class DQN(MultiTaxiAgent):
 
         return loss
 
-    @nnx.jit
     @staticmethod
     def _loss(model, obs_tm1, a_tm1, r_t, discount_t, obs_t):
         q_tm1 = model(*obs_tm1)
-        q_t_val = model(*obs_t)
-        q_t_select = q_t_val
+        q_t = model(*obs_t)
 
-        td_error = nnx.vmap(rlax.double_q_learning)(q_tm1, a_tm1, r_t, discount_t,
-                                                     q_t_val, q_t_select)
-        raise NotImplementedError("Implement the loss function")
+        td_error = jax.vmap(rlax.q_learning)(q_tm1, a_tm1, r_t, discount_t, q_t)
         loss = jnp.mean(rlax.l2_loss(td_error))
 
         return loss
