@@ -64,5 +64,7 @@ def main(num_episodes=15000):
 
         do_episode(env, agent, expert, replay_buffer, use_Dagger=False)
 
+    return agent
+
 if __name__ == '__main__':
     main()

@@ -165,6 +165,16 @@ class BCAgent(MultiTaxiAgent):
 
         return loss
 
+class ILAgent:
+    def __init__(self, env):
+        ''' 
+        loads an agent appropriate for the environment
+        '''
+        pass
+
+    def get_action(self, obs, pruned_actions=None):
+        pass
+
 class DQN(MultiTaxiAgent):
     def __init__(self, env, epsilon_cfg, learning_rate):
         img_shape = env.observation_space['domain_map'].shape
