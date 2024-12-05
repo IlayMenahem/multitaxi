@@ -1,4 +1,5 @@
 **/taxi
-**/saves
 **/__pycache__
+**/.mypy_cache
+**/.ruff_cache
 sketching.ipynb

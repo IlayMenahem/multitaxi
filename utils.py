@@ -1,11 +1,15 @@
 import collections
 import random
+import os
 
-import gymnasium as gym
 import jax.numpy as jnp
 import numpy as np
+from flax import nnx
+import orbax.checkpoint as ocp
 
+checkpoint_dir = 'checkpoint'
 encoding = {' ': 0, ':': -1, '|': 1, 'G': -2, 'F': 2, 'P': 3, 'T': 5}
+
 def encode(value):
     '''
     sum over the characters in the value encodings
@@ -101,3 +105,26 @@ class ReplayBuffer(object):
 
     def is_ready(self):
         return len(self.buffer) >= self.batch_size
+
+def save_model(model: nnx.Module, chkp_dir: str, model_name: str) -> None:
+    if not os.path.exists(chkp_dir):
+        os.makedirs(chkp_dir)
+    model_path = os.path.join(os.path.abspath(chkp_dir), model_name)
+
+    _, state = nnx.split(model)
+
+    checkpointer = ocp.StandardCheckpointer()
+    checkpointer.save(model_path, state, force=True)
+
+def load_model(model: nnx.Module, chkp_dir: str, model_name: str) -> nnx.Module:
+    model_path = os.path.join(os.path.abspath(chkp_dir), model_name)
+    if not os.path.exists(model_path):
+        raise FileNotFoundError(f'{model_path} not found')
+
+    graphdf, state = nnx.split(model)
+    checkpointer = ocp.StandardCheckpointer()
+    resotred_state = checkpointer.restore(model_path, state)
+
+    model = nnx.merge(graphdf, resotred_state)
+
+    return model

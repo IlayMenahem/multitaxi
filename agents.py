@@ -11,7 +11,7 @@ from multi_taxi import single_taxi_v0
 from utils import get_taxi_location, get_passenger_locations
 import numpy as np
 
-from utils import map_observation, get_shapes
+from utils import map_observation, get_shapes, load_model, checkpoint_dir
 from models import MultiTaxi, probabilityMultiTaxi
 
 
@@ -131,11 +131,15 @@ class MultiTaxiAgent(ABC):
         pass
 
 class BCAgent(MultiTaxiAgent):
-    def __init__(self, env: gym.Env, learning_rate=0.001):
+    def __init__(self, env: gym.Env, learning_rate=0.001, checkpoint_name=None):
         self.env = env
         symbolic_shape, img_shape = get_shapes(env)
         self.num_actions = env.action_space.n
         self.model = probabilityMultiTaxi(img_shape, symbolic_shape, self.num_actions)
+
+        if checkpoint_name is not None:
+            print(f"Loading model from {checkpoint_name}")
+            self.model = load_model(self.model, checkpoint_dir, checkpoint_name)
 
         optimizer = optax.chain(optax.clip_by_global_norm(1.0), optax.adamw(learning_rate))
         self._optimizer = nnx.Optimizer(self.model, optimizer)
@@ -148,7 +152,7 @@ class BCAgent(MultiTaxiAgent):
 
         if pruned_action is not None:
             probs = jax.ops.index_update(probs, pruned_action, 0.0)
-            probs = probs / jnp.sum(probs)
+            probs /= jnp.sum(probs)
 
         a = jnp.argmax(probs, axis=-1)
         a = int(a[0])
@@ -222,5 +226,3 @@ class DQN(MultiTaxiAgent):
         loss = jnp.mean(rlax.l2_loss(td_error))
 
         return loss
-
-
