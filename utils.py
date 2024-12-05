@@ -42,46 +42,31 @@ def get_domain_map(env):
 
     return domain_map
 
-class MapWrapper(gym.Wrapper):
-    def __init__(self, env):
-        super().__init__(env)
-        env.reset()
+def prepare_domain_map(env):
+    domain_map = get_domain_map(env)
 
-        self.observation_space = gym.spaces.Dict({
-            'symbolic': env.observation_space,
-            'domain_map': gym.spaces.Box(-15, 15, shape=self.prepare_domain_map().shape)
-        })
+    ret = list(map(lambda row: list(map(encode, row)), domain_map))
+    ret = jnp.array(ret, dtype=jnp.float16)
 
-    def prepare_domain_map(self):
-        domain_map = get_domain_map(self.env)
+    return ret
 
-        ret = list(map(lambda row: list(map(encode, row)), domain_map))
-        ret = jnp.array(ret, dtype=jnp.float16)
+def map_observation(env, observation):
+    domain_map = prepare_domain_map(env)
+    observation = jnp.array(observation, dtype=jnp.float16)
 
-        return ret
+    return observation, domain_map
 
-    def reset(self, **kwargs):
-        observation, _ = self.env.reset(**kwargs)
+def get_shapes(env):
+    domain_map_shape = prepare_domain_map(env).shape
+    observation_shape = env.observation_space.shape[0]
 
-        domain_map = self.prepare_domain_map()
-        observation = jnp.array(observation, dtype=jnp.float16)
-        observation = {
-            'symbolic': observation,
-            'domain_map': domain_map
-        }
-        return observation, {}
-    
-    def step(self, action):
-        observation, reward, done, truncated, info = self.env.step(action)
+    return observation_shape, domain_map_shape
 
-        domain_map = self.prepare_domain_map()
-        observation = jnp.array(observation, dtype=jnp.float16)
-        observation = {
-            'symbolic': observation,
-            'domain_map': domain_map
-        }
+def map_preprocess(env, obs):
+    symbolic_obs, domain_map = map_observation(env, obs)
 
-        return observation, reward, done, truncated, info
+    obs = {'symbolic': symbolic_obs, 'domain_map': domain_map}
+    return obs
 
 def eval_agent_episode(env, agent):
     obs, _ = env.reset()

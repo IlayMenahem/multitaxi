@@ -6,10 +6,12 @@ import jax.numpy as jnp
 import optax
 from flax import nnx
 import rlax
+import gymnasium as gym
 from multi_taxi import single_taxi_v0
 from utils import get_taxi_location, get_passenger_locations
 import numpy as np
 
+from utils import map_observation, get_shapes
 from models import MultiTaxi, probabilityMultiTaxi
 
 
@@ -129,20 +131,24 @@ class MultiTaxiAgent(ABC):
         pass
 
 class BCAgent(MultiTaxiAgent):
-    def __init__(self, env, learning_rate):
-        img_shape = env.observation_space['domain_map'].shape
-        symbolic_shape = env.observation_space['symbolic'].shape[0]
+    def __init__(self, env: gym.Env, learning_rate=0.001):
+        self.env = env
+        symbolic_shape, img_shape = get_shapes(env)
         self.num_actions = env.action_space.n
         self.model = probabilityMultiTaxi(img_shape, symbolic_shape, self.num_actions)
 
         optimizer = optax.chain(optax.clip_by_global_norm(1.0), optax.adamw(learning_rate))
         self._optimizer = nnx.Optimizer(self.model, optimizer)
 
-    def __call__(self, obs):
+    def __call__(self, obs, pruned_action=None):
         self.model.eval()
 
-        symbolic_obs, domain_map = preprocess(obs)
+        symbolic_obs, domain_map = map_observation(self.env, obs)
         probs = self.model(symbolic_obs, domain_map)
+
+        if pruned_action is not None:
+            probs = jax.ops.index_update(probs, pruned_action, 0.0)
+            probs = probs / jnp.sum(probs)
 
         a = jnp.argmax(probs, axis=-1)
         a = int(a[0])
@@ -164,16 +170,6 @@ class BCAgent(MultiTaxiAgent):
         self._optimizer.update(grad)
 
         return loss
-
-class ILAgent:
-    def __init__(self, env):
-        ''' 
-        loads an agent appropriate for the environment
-        '''
-        pass
-
-    def get_action(self, obs, pruned_actions=None):
-        pass
 
 class DQN(MultiTaxiAgent):
     def __init__(self, env, epsilon_cfg, learning_rate):

@@ -2,7 +2,7 @@ from multi_taxi import single_taxi_v0, maps
 from tqdm import tqdm
 
 from agents import BfsAgent, BCAgent
-from utils import eval_agent, MapWrapper, ReplayBuffer
+from utils import eval_agent, map_preprocess, ReplayBuffer
 
 def do_episode(env, agent, expert, replay_buffer, use_Dagger, max_steps=150, target_period=32):
     '''
@@ -23,7 +23,8 @@ def do_episode(env, agent, expert, replay_buffer, use_Dagger, max_steps=150, tar
         agent_action = agent(obs)
         action = agent_action if use_Dagger else expert_action
 
-        replay_buffer.push((obs, expert_action))
+        learning_obs = map_preprocess(env, obs)
+        replay_buffer.push((learning_obs, expert_action))
         obs, reward, done, truncated, _ = env.step(action)
 
         if step % target_period == 0 and replay_buffer.is_ready():
@@ -34,9 +35,11 @@ def do_episode(env, agent, expert, replay_buffer, use_Dagger, max_steps=150, tar
         if done or truncated:
             break
 
+    return total_reward
+
 def main(num_episodes=15000):
     env = single_taxi_v0.gym_env(
-        num_passengers=3,
+        num_passengers=2,
         max_fuel=75,
         max_steps=150,
         pickup_only=True,
@@ -45,11 +48,11 @@ def main(num_episodes=15000):
         render_mode='human'
     )
     env.seed(42)
-    env = MapWrapper(env)
+    env.reset()
 
-    replay_buffer = ReplayBuffer(capacity=1000, batch_size=32)
+    replay_buffer = ReplayBuffer(capacity=2500, batch_size=32)
 
-    agent = BCAgent(env, learning_rate=0.001)
+    agent = BCAgent(env)
     expert = BfsAgent(env)
 
     progress_bar = tqdm(range(num_episodes))
