@@ -77,7 +77,7 @@ class BfsAgent:
             (0, -1): action_to_name['west'],
             (0, 1): action_to_name['east'],
             'pickup': action_to_name['pickup'],
-            'refuel': action_to_name['refuel'],
+            # 'refuel': action_to_name['refuel'],
         }
 
     def __call__(self, obs):

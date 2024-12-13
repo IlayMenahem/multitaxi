@@ -72,17 +72,20 @@ def map_preprocess(env, obs):
     obs = {'symbolic': symbolic_obs, 'domain_map': domain_map}
     return obs
 
-def eval_agent_episode(env, agent):
+def eval_agent_episode(env, agent, max_steps=50):
     obs, _ = env.reset()
     done = False
     truncated = False
 
     total_reward = 0
 
-    while not (done or truncated):
+    for _ in range(max_steps):
         action = agent(obs)
         obs, reward, done, truncated, _ = env.step(action)
         total_reward += reward
+
+        if done or truncated:
+            break
 
     return total_reward
 

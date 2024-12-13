@@ -4,7 +4,7 @@ from tqdm import tqdm
 from agents import BfsAgent, BCAgent
 from utils import eval_agent, map_preprocess, ReplayBuffer, save_model, checkpoint_dir
 
-def do_episode(env, step, agent, expert, replay_buffer, use_Dagger, max_steps=150, target_period=128):
+def do_episode(env, step, agent, expert, replay_buffer, use_Dagger, max_steps=50, target_period=128):
     '''
     does imitation learning episode
     :param env: environment
@@ -41,12 +41,11 @@ def do_episode(env, step, agent, expert, replay_buffer, use_Dagger, max_steps=15
 def main(num_episodes, model_name):
     env = single_taxi_v0.gym_env(
         num_passengers=2,
-        max_fuel=75,
-        max_steps=150,
         pickup_only=True,
         observation_type='symbolic',
         domain_map=maps.DEFAULT_MAP,
-        render_mode='human')
+        render_mode='human'
+    )
     env.seed(42)
     env.reset()
 
@@ -60,7 +59,7 @@ def main(num_episodes, model_name):
 
     for episode in range(num_episodes):
         if episode % 1000 == 0:
-            eval_rewards =  eval_agent(env, agent, num_episodes=50)
+            eval_rewards = eval_agent(env, agent, num_episodes=50)
             avg_reward = sum(eval_rewards)/len(eval_rewards)
             progress_bar.set_description(f'Avg Reward: {avg_reward:.2f}')
 
