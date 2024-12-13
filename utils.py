@@ -3,6 +3,8 @@ import random
 import os
 
 import jax.numpy as jnp
+import jax
+import rlax
 import numpy as np
 from flax import nnx
 import orbax.checkpoint as ocp
@@ -11,10 +13,7 @@ checkpoint_dir = 'checkpoint'
 encoding = {' ': 0, ':': -1, '|': 1, 'G': -2, 'F': 2, 'P': 3, 'T': 5}
 
 def encode(value):
-    '''
-    sum over the characters in the value encodings
-    '''
-    return sum([encoding[char] for char in value])
+    return sum(encoding[char] for char in value)
 
 def get_passenger_locations(env):
     passengers = env.unwrapped.state().passengers
@@ -108,6 +107,12 @@ class ReplayBuffer(object):
 
     def is_ready(self):
         return len(self.buffer) >= self.batch_size
+
+def epsilon_greedy(epsilon, qVals, episode, evaluation):
+        train_a = rlax.epsilon_greedy(epsilon).sample(episode, qVals)
+        eval_a = rlax.greedy().sample(episode, qVals)
+        a = jax.lax.select(evaluation, eval_a, train_a)
+        a = int(a[0])
 
 def save_model(model: nnx.Module, chkp_dir: str, model_name: str) -> None:
     if not os.path.exists(chkp_dir):

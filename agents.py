@@ -11,7 +11,7 @@ from multi_taxi import single_taxi_v0
 from utils import get_taxi_location, get_passenger_locations
 import numpy as np
 
-from utils import map_observation, get_shapes, load_model, checkpoint_dir
+from utils import map_observation, get_shapes, load_model, checkpoint_dir, epsilon_greedy
 from models import MultiTaxi, probabilityMultiTaxi
 
 
@@ -106,17 +106,6 @@ def preprocess_batch(batch):
 
     return symbolic_obs, domain_map
 
-def preprocess(obs):
-    '''
-    convert the observation to jax arrays
-    :param obs: Tuple of dictionaries containing the domain map and symbolic observation
-    :return: Tuple of jax arrays
-    '''
-    domain_map = jnp.array(obs['domain_map'], dtype=jnp.float16)
-    symbolic_obs = jnp.array(obs['symbolic'], dtype=jnp.float16)
-
-    return symbolic_obs, domain_map
-
 class MultiTaxiAgent(ABC):
     @abstractmethod
     def __init__(self, env, learning_rate):
@@ -176,29 +165,29 @@ class BCAgent(MultiTaxiAgent):
         return loss
 
 class DQN(MultiTaxiAgent):
-    def __init__(self, env, epsilon_cfg, learning_rate):
-        img_shape = env.observation_space['domain_map'].shape
-        symbolic_shape = env.observation_space['symbolic'].shape[0]
+    def __init__(self, env, epsilon_cfg, learning_rate=0.001, checkpoint_name=None):
+        self.env = env
+        symbolic_shape, img_shape = get_shapes(env)
         num_actions = env.action_space.n
 
         self.model = MultiTaxi(img_shape, symbolic_shape, num_actions)
         self._epsilon_by_frame = optax.polynomial_schedule(**epsilon_cfg)
 
+        if checkpoint_name is not None:
+            print(f"Loading model from {checkpoint_name}")
+            self.model = load_model(self.model, checkpoint_dir, checkpoint_name)
+
         optimizer = optax.chain(optax.clip_by_global_norm(1.0),optax.adamw(learning_rate))
         self._optimizer = nnx.Optimizer(self.model, optimizer)
 
-    def __call__(self, obs, episode, key, evaluation=False):
+    def __call__(self, obs, episode=0, evaluation=True):
         self.model.eval()
 
-        symbolic_obs, domain_map = preprocess(obs)
-
+        symbolic_obs, domain_map = map_observation(self.env, obs)
         qVals = self.model(symbolic_obs, domain_map)
         epsilon = self._epsilon_by_frame(episode)
 
-        train_a = rlax.epsilon_greedy(epsilon).sample(key, qVals)
-        eval_a = rlax.greedy().sample(key, qVals)
-        a = jax.lax.select(evaluation, eval_a, train_a)
-        a = int(a[0])
+        a = epsilon_greedy(epsilon, qVals, episode, evaluation)
 
         return a
 
@@ -211,18 +200,17 @@ class DQN(MultiTaxiAgent):
         r_t = jnp.array(r_t, dtype=jnp.float16)
         discount_t = jnp.array(discount_t, dtype=jnp.float16)
 
-        grad_fn = nnx.value_and_grad(self._loss)
+        def _loss(model, obs_tm1, a_tm1, r_t, discount_t, obs_t):
+            q_tm1 = model(*obs_tm1)
+            q_t = model(*obs_t)
+
+            td_error = jax.vmap(rlax.q_learning)(q_tm1, a_tm1, r_t, discount_t, q_t)
+            loss = jnp.mean(rlax.l2_loss(td_error))
+
+            return loss
+
+        grad_fn = nnx.value_and_grad(nnx.jit(_loss))
         loss, grad = grad_fn(self.model, obs_tm1, a_tm1, r_t, discount_t, obs_t)
         self._optimizer.update(grad)
-
-        return loss
-
-    @staticmethod
-    def _loss(model, obs_tm1, a_tm1, r_t, discount_t, obs_t):
-        q_tm1 = model(*obs_tm1)
-        q_t = model(*obs_t)
-
-        td_error = jax.vmap(rlax.q_learning)(q_tm1, a_tm1, r_t, discount_t, q_t)
-        loss = jnp.mean(rlax.l2_loss(td_error))
 
         return loss
