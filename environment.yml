@@ -1,0 +1,15 @@
+name: multitaxi
+channels:
+  - defaults
+  - conda-forge
+dependencies:
+  - python=3.10
+  - pip
+  - pip:
+      - gymnasium
+      - git+https://github.com/CLAIR-LAB-TECHNION/multi-taxi@0.4.0
+      - jax
+      - flax>=0.10.1
+      - optax
+      - rlax
+      - tqdm

@@ -1,18 +1,16 @@
 from collections import deque
-from abc import ABC, abstractmethod
 
 import jax
 import jax.numpy as jnp
 import optax
 from flax import nnx
-import rlax
 import gymnasium as gym
 from multi_taxi import single_taxi_v0
 from utils import get_taxi_location, get_passenger_locations
 import numpy as np
 
-from utils import map_observation, get_shapes, load_model, checkpoint_dir, epsilon_greedy
-from models import MultiTaxi, probabilityMultiTaxi
+from utils import map_observation, get_shapes, load_model, checkpoint_dir
+from models import probabilityMultiTaxi
 
 
 def recounstruct_path(prev, location):
@@ -77,7 +75,6 @@ class BfsAgent:
             (0, -1): action_to_name['west'],
             (0, 1): action_to_name['east'],
             'pickup': action_to_name['pickup'],
-            # 'refuel': action_to_name['refuel'],
         }
 
     def __call__(self, obs):
@@ -106,20 +103,7 @@ def preprocess_batch(batch):
 
     return symbolic_obs, domain_map
 
-class MultiTaxiAgent(ABC):
-    @abstractmethod
-    def __init__(self, env, learning_rate):
-        pass
-
-    @abstractmethod
-    def __call__(self, obs):
-        pass
-
-    @abstractmethod
-    def learner_step(self):
-        pass
-
-class BCAgent(MultiTaxiAgent):
+class BCAgent:
     def __init__(self, env: gym.Env, learning_rate=0.001, checkpoint_name=None):
         self.env = env
         symbolic_shape, img_shape = get_shapes(env)
@@ -133,15 +117,11 @@ class BCAgent(MultiTaxiAgent):
         optimizer = optax.chain(optax.clip_by_global_norm(1.0), optax.adamw(learning_rate))
         self._optimizer = nnx.Optimizer(self.model, optimizer)
 
-    def __call__(self, obs, pruned_action=None):
+    def __call__(self, obs):
         self.model.eval()
 
         symbolic_obs, domain_map = map_observation(self.env, obs)
         probs = self.model(symbolic_obs, domain_map)
-
-        if pruned_action is not None:
-            probs = jax.ops.index_update(probs, pruned_action, 0.0)
-            probs /= jnp.sum(probs)
 
         a = jnp.argmax(probs, axis=-1)
         a = int(a[0])
@@ -160,57 +140,6 @@ class BCAgent(MultiTaxiAgent):
 
         grad_fn = nnx.value_and_grad(nnx.jit(loss_fn))
         loss, grad = grad_fn(self.model, symbolic_obs, domain_map, expert_action_one_hot)
-        self._optimizer.update(grad)
-
-        return loss
-
-class DQN(MultiTaxiAgent):
-    def __init__(self, env, epsilon_cfg, learning_rate=0.001, checkpoint_name=None):
-        self.env = env
-        symbolic_shape, img_shape = get_shapes(env)
-        num_actions = env.action_space.n
-
-        self.model = MultiTaxi(img_shape, symbolic_shape, num_actions)
-        self._epsilon_by_frame = optax.polynomial_schedule(**epsilon_cfg)
-
-        if checkpoint_name is not None:
-            print(f"Loading model from {checkpoint_name}")
-            self.model = load_model(self.model, checkpoint_dir, checkpoint_name)
-
-        optimizer = optax.chain(optax.clip_by_global_norm(1.0),optax.adamw(learning_rate))
-        self._optimizer = nnx.Optimizer(self.model, optimizer)
-
-    def __call__(self, obs, episode=0, evaluation=True):
-        self.model.eval()
-
-        symbolic_obs, domain_map = map_observation(self.env, obs)
-        qVals = self.model(symbolic_obs, domain_map)
-        epsilon = self._epsilon_by_frame(episode)
-
-        a = epsilon_greedy(epsilon, qVals, episode, evaluation)
-
-        return a
-
-    def learner_step(self, obs_tm1, a_tm1, r_t, discount_t, obs_t):
-        self.model.train()
-
-        obs_tm1 = preprocess_batch(obs_tm1)
-        obs_t = preprocess_batch(obs_t)
-        a_tm1 = jnp.array(a_tm1, dtype=jnp.int16)
-        r_t = jnp.array(r_t, dtype=jnp.float16)
-        discount_t = jnp.array(discount_t, dtype=jnp.float16)
-
-        def _loss(model, obs_tm1, a_tm1, r_t, discount_t, obs_t):
-            q_tm1 = model(*obs_tm1)
-            q_t = model(*obs_t)
-
-            td_error = jax.vmap(rlax.q_learning)(q_tm1, a_tm1, r_t, discount_t, q_t)
-            loss = jnp.mean(rlax.l2_loss(td_error))
-
-            return loss
-
-        grad_fn = nnx.value_and_grad(nnx.jit(_loss))
-        loss, grad = grad_fn(self.model, obs_tm1, a_tm1, r_t, discount_t, obs_t)
         self._optimizer.update(grad)
 
         return loss

@@ -38,9 +38,12 @@ def do_episode(env, step, agent, expert, replay_buffer, use_Dagger, max_steps=50
 
     return step, total_reward
 
-def main(num_episodes, model_name):
+if __name__ == '__main__':
+    num_episodes = 30000
+    model_name = '3_passenger_bc'
+
     env = single_taxi_v0.gym_env(
-        num_passengers=2,
+        num_passengers=3,
         pickup_only=True,
         observation_type='symbolic',
         domain_map=maps.DEFAULT_MAP,
@@ -67,8 +70,3 @@ def main(num_episodes, model_name):
 
         step_count, _ = do_episode(env, step_count, agent, expert, replay_buffer, use_Dagger=False)
         progress_bar.update(1)
-
-    return agent
-
-if __name__ == '__main__':
-    main(30000, '2_passenger_bc')
